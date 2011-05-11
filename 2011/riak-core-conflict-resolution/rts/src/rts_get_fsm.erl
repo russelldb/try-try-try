@@ -21,6 +21,7 @@
                 stat_name,
                 preflist,
                 num_r=0,
+                num_nf=0,
                 replies=[]}).
 
 %%%===================================================================
@@ -65,23 +66,18 @@ execute(timeout, SD0=#state{req_id=ReqId,
 
 %% @doc Wait for R replies and then respond to From (original client
 %% that called `rts:get/2').
-%% TODO: read repair...or another blog post?
-waiting({ok, ReqID, Val}, SD0=#state{from=From, num_r=NumR0, replies=Replies0}) ->
-    NumR = NumR0 + 1,
-    Replies = [Val|Replies0],
-    SD = SD0#state{num_r=NumR,replies=Replies},
-    if
-        NumR =:= ?R ->
-            Reply =
-                case lists:any(different(Val), Replies) of
-                    true ->
-                        Replies;
-                    false ->
-                        Val
-                end,
+waiting({ok, ReqID, Val}, SD0=#state{from=From}) ->
+    SD=#state{replies=Replies} = update_state(Val, SD0),
+    case check_quorum(SD) of
+        r_met ->
+            Reply = hd(Replies),
             From ! {ReqID, ok, Reply},
             {stop, normal, SD};
-        true -> {next_state, waiting, SD}
+        n_met ->
+            Reply = not_found,
+            From ! {ReqID, ok, Reply},
+            {stop, normal, SD};
+        not_met -> {next_state, waiting, SD}
     end.
 
 handle_info(_Info, _StateName, StateData) ->
@@ -102,6 +98,16 @@ terminate(_Reason, _SN, _SD) ->
 %%% Internal Functions
 %%%===================================================================
 
-different(A) -> fun(B) -> A =/= B end.
+update_state(not_found, SD=#state{num_nf=NumNF}) ->
+    SD#state{num_nf=NumNF+1};
+update_state(Val, SD=#state{num_r=NumR, replies=Replies}) ->
+    SD#state{num_r=NumR+1,replies=[Val|Replies]}.
+
+check_quorum(#state{num_r=NumR}) when NumR >= ?R ->
+    r_met;
+check_quorum(#state{num_r=NumR, num_nf=NumNF}) when (NumR + NumNF) =:=  ?N ->
+    n_met;
+check_quorum(_) ->
+    not_met.
 
 mk_reqid() -> erlang:phash2(erlang:now()).
