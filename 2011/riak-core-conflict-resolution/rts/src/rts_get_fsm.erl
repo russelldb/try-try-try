@@ -70,7 +70,12 @@ waiting({ok, ReqID, Val}, SD0=#state{from=From}) ->
     SD=#state{replies=Replies} = update_state(Val, SD0),
     case check_quorum(SD) of
         r_met ->
-            Reply = hd(Replies),
+            [Val|_] = Replies,
+            Reply =
+                case lists:any(different(Val), Replies) of
+                    true -> Replies;
+                    false -> Val
+                end,
             From ! {ReqID, ok, Reply},
             {stop, normal, SD};
         n_met ->
@@ -97,6 +102,8 @@ terminate(_Reason, _SN, _SD) ->
 %%%===================================================================
 %%% Internal Functions
 %%%===================================================================
+
+different(A) -> fun(B) -> A =/= B end.
 
 update_state(not_found, SD=#state{num_nf=NumNF}) ->
     SD#state{num_nf=NumNF+1};
