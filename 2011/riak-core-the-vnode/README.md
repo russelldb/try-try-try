@@ -59,7 +59,7 @@ This callback initializes the state of the vnode.  The entry vnode needs to stor
               ],
         {ok, #state { partition=Partition, reg=Reg }}.
 
-The entry vnode needs to track the stat updates as they are sent in.
+The stats vnode needs to track the stat updates as they are sent in.
 
     init([Partition]) ->
         {ok, #state { partition=Partition, stats=dict:new() }}.
